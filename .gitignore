@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build / cache
+.next/
+dist/
+build/
+out/
+.turbo/
+.cache/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log
+
+# Cursor local cache
+.cursor/skills-catalog/.cache/
