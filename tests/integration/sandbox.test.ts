@@ -22,14 +22,14 @@ describe.skipIf(!runIntegration)('integration', () => {
 
     const result = await sandbox.exec('cmd /c echo wabox-ok', {
       label: 'smoke',
-      timeoutMs: 30_000,
+      timeoutMs: 180_000,
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toContain('wabox-ok');
 
     const nodeResult = await sandbox.exec('node -e "console.log(2)"', {
       label: 'math',
-      timeoutMs: 30_000,
+      timeoutMs: 180_000,
     });
     expect(nodeResult.exitCode).toBe(0);
     expect(nodeResult.stdout.trim()).toBe('2');
@@ -37,7 +37,7 @@ describe.skipIf(!runIntegration)('integration', () => {
     const log = await sandbox.destroy();
     expect(log.actions.length).toBeGreaterThanOrEqual(2);
   },
-    120_000,
+    420_000,
   );
 });
 

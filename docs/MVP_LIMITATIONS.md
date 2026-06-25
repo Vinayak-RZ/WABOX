@@ -35,6 +35,7 @@ On some Windows hosts MXC selects the **AppContainer + DACL** isolation tier. If
 1. Check `getSupportStatus().isolationWarnings`
 2. Run elevated MXC host prep: `wxc-host-prep prepare-system-drive` (ships with MXC native binaries)
 3. Avoid denying non-existent paths (e.g. `workspace/.env`) — MXC DACL fallback may require write-DAC on denied paths
+4. **Cold start can be slow** — first spawn on `appcontainer-dacl` may take several minutes while MXC applies DACL recovery; subsequent spawns are typically faster
 
 Integration tests (`WABOX_INTEGRATION=1`) require a host where MXC one-shot spawns complete successfully.
 
