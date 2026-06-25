@@ -12,6 +12,13 @@ import {
 import type { ChildProcess } from 'node:child_process';
 
 const SCHEMA_VERSION = '0.7.0-alpha';
+const SPIKE_TIMEOUT_MS = 45_000;
+
+function formatExitCode(code: number | null): string {
+  if (code === null) return 'null';
+  const unsigned = code >>> 0;
+  return `${code} (0x${unsigned.toString(16).toUpperCase()})`;
+}
 
 function execInSandbox(commandLine: string, allowWindows = false): Promise<number> {
   const tools = getAvailableToolsPolicy(process.env);
@@ -36,22 +43,44 @@ function execInSandbox(commandLine: string, allowWindows = false): Promise<numbe
     const child = spawnSandboxFromConfig(config, { usePty: false }) as ChildProcess;
     let stdout = '';
     let stderr = '';
+    let settled = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+
+    const timer = setTimeout(() => {
+      child.kill();
+      finish(() => {
+        reject(new Error(`timed out after ${SPIKE_TIMEOUT_MS}ms\nstdout: ${stdout}\nstderr: ${stderr}`));
+      });
+    }, SPIKE_TIMEOUT_MS);
+
     child.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
     });
     child.stderr?.on('data', (chunk: Buffer) => {
       stderr += chunk.toString();
     });
-    child.on('error', reject);
+    child.on('error', (err) => finish(() => reject(err)));
     child.stdin?.end();
     child.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`exit ${code}\nstdout: ${stdout}\nstderr: ${stderr}`));
-        return;
-      }
-      process.stdout.write(stdout);
-      if (stderr) process.stderr.write(stderr);
-      resolve(code ?? 0);
+      finish(() => {
+        if (code !== 0) {
+          reject(
+            new Error(
+              `exit ${formatExitCode(code)}\nstdout: ${stdout}\nstderr: ${stderr}`,
+            ),
+          );
+          return;
+        }
+        process.stdout.write(stdout);
+        if (stderr) process.stderr.write(stderr);
+        resolve(code ?? 0);
+      });
     });
   });
 }
@@ -63,6 +92,16 @@ async function main(): Promise<void> {
   if (!support.isSupported) {
     console.error('MXC is not supported on this host.');
     process.exit(1);
+  }
+
+  if (support.isolationWarnings?.length) {
+    console.warn('\nIsolation warnings:');
+    for (const warning of support.isolationWarnings) {
+      console.warn(`  - ${warning}`);
+    }
+    console.warn(
+      '\nIf spike fails or hangs, run elevated: wxc-host-prep prepare-system-drive\n',
+    );
   }
 
   const tools = getAvailableToolsPolicy(process.env);
