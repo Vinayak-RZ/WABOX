@@ -43,6 +43,7 @@ function execInSandbox(commandLine: string, allowWindows = false): Promise<numbe
       stderr += chunk.toString();
     });
     child.on('error', reject);
+    child.stdin?.end();
     child.on('close', (code) => {
       if (code !== 0) {
         reject(new Error(`exit ${code}\nstdout: ${stdout}\nstderr: ${stderr}`));

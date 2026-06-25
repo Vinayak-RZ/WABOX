@@ -30,7 +30,13 @@ This document describes what the **0.1.0 MVP** does *not* do. WABOX is a blast-r
 
 ## Host preparation
 
-On some Windows hosts MXC selects the **AppContainer + DACL** isolation tier. If sandbox spawns hang or fail to start `node.exe`, see MXC guidance to run `wxc-host-prep prepare-system-drive` (elevated). Check `getSupportStatus().isolationWarnings` for details.
+On some Windows hosts MXC selects the **AppContainer + DACL** isolation tier. If sandbox spawns hang or fail to start `node.exe`:
+
+1. Check `getSupportStatus().isolationWarnings`
+2. Run elevated MXC host prep: `wxc-host-prep prepare-system-drive` (ships with MXC native binaries)
+3. Avoid denying non-existent paths (e.g. `workspace/.env`) — MXC DACL fallback may require write-DAC on denied paths
+
+Integration tests (`WABOX_INTEGRATION=1`) require a host where MXC one-shot spawns complete successfully.
 
 ## Threat model
 

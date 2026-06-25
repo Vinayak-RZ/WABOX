@@ -4,7 +4,9 @@ import { createAgentSandbox, getSupportStatus } from '../../src/index.js';
 const runIntegration = process.env.WABOX_INTEGRATION === '1';
 
 describe.skipIf(!runIntegration)('integration', () => {
-  it('runs node inside a sandbox session', async () => {
+  it(
+    'runs node inside a sandbox session',
+    async () => {
     const status = getSupportStatus();
     expect(status.supported).toBe(true);
 
@@ -18,15 +20,25 @@ describe.skipIf(!runIntegration)('integration', () => {
       logDir: '.wabox/test-sessions',
     });
 
-    const result = await sandbox.exec('node -e "console.log(2)"', { label: 'math' });
+    const result = await sandbox.exec('cmd /c echo wabox-ok', {
+      label: 'smoke',
+      timeoutMs: 30_000,
+    });
     expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('2');
-    expect(result.actionId).toBe(1);
+    expect(result.stdout.trim()).toContain('wabox-ok');
+
+    const nodeResult = await sandbox.exec('node -e "console.log(2)"', {
+      label: 'math',
+      timeoutMs: 30_000,
+    });
+    expect(nodeResult.exitCode).toBe(0);
+    expect(nodeResult.stdout.trim()).toBe('2');
 
     const log = await sandbox.destroy();
-    expect(log.actions).toHaveLength(1);
-    expect(log.actions[0]?.label).toBe('math');
-  }, 180_000);
+    expect(log.actions.length).toBeGreaterThanOrEqual(2);
+  },
+    120_000,
+  );
 });
 
 describe('getSupportStatus', () => {

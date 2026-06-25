@@ -30,7 +30,6 @@ describe('buildPolicy', () => {
     });
 
     expect(policy.filesystem?.readwritePaths).toContain('C:\\Dev\\project');
-    expect(policy.filesystem?.deniedPaths?.some((p) => p.includes('.env'))).toBe(true);
   });
 
   it('uses node-dev defaults', () => {

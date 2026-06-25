@@ -3,7 +3,7 @@ import {
   getTemporaryFilesPolicy,
 } from '@microsoft/mxc-sdk';
 import type { MirroredEnvInfo, PresetName, ResolvedPolicy, WaboxPolicy } from '../domain/types.js';
-import { expandWorkspaceDenials, unionPaths } from '../domain/path-utils.js';
+import { unionPaths } from '../domain/path-utils.js';
 import { NODE_DEV_EXPECTED_TOOLS } from '../presets/node-dev.js';
 import { getPreset } from '../presets/registry.js';
 
@@ -93,7 +93,6 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
       filesystem: {
         ...merged.filesystem,
         readwritePaths: unionPaths(merged.filesystem.readwritePaths, [workspace]),
-        deniedPaths: unionPaths(merged.filesystem.deniedPaths, expandWorkspaceDenials(workspace)),
       },
     };
   }

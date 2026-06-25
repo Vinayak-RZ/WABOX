@@ -104,6 +104,8 @@ export async function execInMxcSandbox(
       });
     }, timeoutMs + 5_000);
 
+    child.stdin?.end();
+
     child.stdout?.on('data', (chunk: Buffer) => {
       stdout += chunk.toString();
     });
