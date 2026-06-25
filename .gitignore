@@ -21,3 +21,6 @@ Thumbs.db
 
 # Cursor local cache
 .cursor/skills-catalog/.cache/
+
+# WABOX runtime
+.wabox/
