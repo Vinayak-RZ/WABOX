@@ -12,12 +12,89 @@ WABOX’s thesis (see [WABOX_SPEC.md](../WABOX_SPEC.md)) is that **native Window
 
 Docker is still the default “sandbox” for many agent tools on Windows — this benchmark quantifies the gap.
 
+---
+
+## Reference results (this machine)
+
+**Source:** `.wabox/benchmarks/wabox-vs-docker-2026-06-26T08-04-42-481Z.json`  
+**Run:** 2026-06-26 · 3 iterations per workload · `node:22-alpine` · one-shot model
+
+### Host
+
+| | |
+|---|---|
+| OS | Windows_NT 10.0.26200 (x64) |
+| Node | 24.14.0 |
+| CPUs / RAM | 16 cores · 15.8 GB |
+| MXC tier | `appcontainer-dacl` |
+| Docker | 29.2.0 |
+
+MXC warnings on this host: BaseContainer unavailable; recommends elevated `wxc-host-prep prepare-system-drive`.
+
+### Summary table
+
+| Workload | WABOX mean | WABOX p50 | WABOX cold | WABOX ok | Docker mean | Docker p50 | Docker cold | Docker ok | Faster (mean) |
+|----------|------------|-----------|------------|----------|-------------|------------|-------------|-----------|---------------|
+| **echo** (`cmd /c echo`) | 32.7 s | 28.2 s | 42.0 s | 3/3 | 2.5 s | 1.5 s | 4.9 s | 3/3 | **Docker ~13×** |
+| **node-eval** (`node -e`) | — | — | 43.3 s | 0/3 | 2.1 s | 2.0 s | 3.4 s | 3/3 | **Docker** (WABOX failed) |
+| **npm-version** (`npm --version`) | — | — | 81.7 s | 0/3 | 2.4 s | 1.5 s | 4.4 s | 3/3 | **Docker** (WABOX failed) |
+
+*WABOX mean/p50 omitted where success rate was 0%.*
+
+### Per-iteration detail
+
+#### echo — only workload where WABOX succeeded
+
+| Iteration | WABOX | Docker |
+|-----------|-------|--------|
+| 1 (cold) | 41,968 ms | 4,855 ms |
+| 2 | 28,160 ms | 1,501 ms |
+| 3 | 28,036 ms | 1,239 ms |
+
+WABOX warmed from ~42 s → ~28 s after first DACL-heavy spawn. Docker warmed from ~5 s → ~1.2 s.
+
+#### node-eval — WABOX failed every iteration
+
+| Iteration | WABOX | Docker |
+|-----------|-------|--------|
+| 1 | 43,260 ms · exit `0xC0000142` | 3,364 ms · ok |
+| 2 | 31,814 ms · exit `0xC0000142` | 1,981 ms · ok |
+| 3 | 35,206 ms · exit `0xC0000142` | 1,100 ms · ok |
+
+`0xC0000142` = Windows “application failed to initialize” — sandboxed `node.exe` could not start under AppContainer+DACL on this host without full host prep.
+
+#### npm-version — WABOX failed every iteration
+
+| Iteration | WABOX | Docker |
+|-----------|-------|--------|
+| 1 | 81,746 ms · CreateProcessW file not found | 4,416 ms · ok |
+| 2 | 65,578 ms · file not found | 1,469 ms · ok |
+| 3 | 56,214 ms · file not found | 1,382 ms · ok |
+
+MXC could not resolve `npm` inside the sandbox (PATH/metadata issue on `appcontainer-dacl` tier), even after ~60–80 s per attempt.
+
+### What this run actually shows
+
+| Claim | Supported by this run? |
+|-------|------------------------|
+| WABOX is faster than Docker today | **No** — Docker won on all comparable workloads |
+| WABOX can run simple Windows commands | **Partially** — `cmd /c echo` works but ~13× slower than `docker run` |
+| WABOX can run Node/npm agent tasks on this host | **No** — node init failure + npm not found |
+| Docker one-shot overhead is low | **Yes** — ~1.2–2.5 s warm, ~3–5 s cold |
+| MXC host prep matters | **Yes** — `appcontainer-dacl` + missing prep explains failures and slow echo |
+
+**Honest takeaway:** On this machine **without** `wxc-host-prep`, Docker is faster and more reliable for the default benchmark workloads. WABOX’s performance story is **not validated yet** — rerun after host prep and when `npm run diagnose` passes node + npm.
+
+**Target narrative (after host is healthy):** Re-benchmark and look for WABOX warm p50 &lt; Docker warm p50 on `node -e` and `npm --version`. Until then, use the echo row only as a “MXC works but DACL is expensive” data point.
+
+---
+
 ## What we measure
 
 | Metric | Meaning |
 |--------|---------|
-| **Cold start** | First successful iteration latency |
-| **Mean / p50 / p95** | Per-command latency over N iterations |
+| **Cold start** | First iteration latency |
+| **Mean / p50 / p95** | Per-command latency over N iterations (successful runs only in stats) |
 | **Success rate** | % of iterations that exited 0 |
 
 ### Workloads (default)
@@ -57,9 +134,9 @@ Results are written to `.wabox/benchmarks/wabox-vs-docker-<timestamp>.json`.
 
 ### Prerequisites
 
-- Windows 11 24H2+ with MXC working (`npm run spike` or `npm run diagnose` passes)
+- Windows 11 24H2+ with MXC working (`npm run spike` or `npm run diagnose` passes **all** steps including node/npm)
 - Docker Desktop running (for full comparison)
-- Optional: `wxc-host-prep prepare-system-drive` (elevated) if MXC cold start is very slow
+- **Recommended before benchmarking:** elevated `wxc-host-prep prepare-system-drive`
 
 ### Debugging hangs
 
@@ -70,22 +147,33 @@ $env:WABOX_DEBUG = "1"
 npm run diagnose
 ```
 
-**What is happening:** WABOX spawns `wxc-exec.exe` (MXC native binary). On the `appcontainer-dacl` tier, wxc-exec may run **DACL recovery** across every path in the sandbox policy before your command runs. A bloated PATH mirror (e.g. entire `D:\` on PATH) makes this extremely slow. WABOX now drops drive-root paths automatically; host prep still helps.
+**What is happening:** WABOX spawns `wxc-exec.exe` (MXC native binary). On the `appcontainer-dacl` tier, wxc-exec may run **DACL recovery** across every path in the sandbox policy before your command runs. WABOX drops drive-root PATH entries automatically; host prep is still required for reliable `node`/`npm` startup.
 
-See [docs/MVP_LIMITATIONS.md](MVP_LIMITATIONS.md).
+See [MVP_LIMITATIONS.md](MVP_LIMITATIONS.md).
 
 ## Interpreting results
 
-**Speedup > 1** in the JSON `comparison.meanSpeedup` means WABOX mean latency is lower (Docker mean / WABOX mean).
+In the JSON report, `comparison.meanSpeedup` = Docker mean ÷ WABOX mean.
 
-### Expected patterns
+| meanSpeedup | Meaning |
+|-------------|---------|
+| **> 1** | WABOX faster (lower latency) |
+| **< 1** | Docker faster |
+| **null** | WABOX had no successful runs — cannot compare |
+
+### Reading the reference run
+
+- **echo:** meanSpeedup ≈ **0.08** → Docker ~13× faster on mean latency
+- **node-eval / npm-version:** meanSpeedup **null** → fix WABOX reliability first, then re-benchmark
+
+### Expected patterns (healthy host)
 
 | Scenario | Typical winner |
 |----------|----------------|
-| Simple echo / node one-liner (warm) | WABOX often faster — no container boot |
-| First command after reboot | Depends — MXC DACL cold start can be slow |
-| npm with cold Docker image | Docker may lose on first pull; exclude pull time |
-| Heavy Linux-only tooling | Docker — different problem domain |
+| Simple echo (warm, host prepped) | Closer race; WABOX may improve after DACL cache warms |
+| node / npm one-liner (warm) | WABOX *may* beat Docker if MXC spawn &lt; container boot — **needs re-measurement** |
+| First command after reboot | Often slow for WABOX (DACL cold start) |
+| Linux-only tooling | Docker — different problem domain |
 
 ### What this does *not* prove
 
@@ -95,14 +183,15 @@ See [docs/MVP_LIMITATIONS.md](MVP_LIMITATIONS.md).
 
 ## Honest positioning
 
-Use results to support:
+**Only claim what your JSON shows.** Example after a successful run:
 
-> “For native Windows agent loops that spawn per command, WABOX reduces latency vs `docker run` by X× on mean/p50 for node/npm tasks.”
+> “On Windows 11 24H2 with MXC host prep, WABOX one-shot `node -e` averaged X ms vs Docker `docker run` Y ms (Z× faster).”
 
-Do **not** claim WABOX replaces Docker for all sandboxing — only for **Windows-native agent dev workflows** where Docker adds a Linux VM tax.
+**Do not claim** WABOX replaces Docker for all sandboxing — only for **Windows-native agent dev workflows** when MXC is healthy on the host.
 
 ## Next benchmarks (backlog)
 
+- [ ] Re-run after `wxc-host-prep` and add second results table
 - [ ] Memory / CPU sample via `Get-Process` vs `docker stats`
 - [ ] Stateful session: `docker exec` vs WABOX v2 `isolation_session`
 - [ ] `npm install` in workspace (I/O heavy, realistic agent task)
