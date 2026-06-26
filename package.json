@@ -24,6 +24,7 @@
     "test:integration": "cross-env WABOX_INTEGRATION=1 vitest run tests/integration",
     "spike": "tsx scripts/mxc-spike.ts",
     "example": "tsx examples/minimal-agent.ts",
+    "benchmark": "tsx scripts/benchmark-wabox-vs-docker.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
