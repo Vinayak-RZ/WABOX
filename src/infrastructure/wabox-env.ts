@@ -7,6 +7,8 @@ export interface WaboxEnvConfig {
   logDir?: string;
   dockerImage?: string;
   benchmarkIterations?: number;
+  /** Extra readonly dir for Node/npm when not discoverable via minimal mirror (e.g. D:/nodejs). */
+  toolsDir?: string;
 }
 
 export function parseMirrorEnv(raw?: string): MirrorEnvMode | undefined {
@@ -33,10 +35,9 @@ export function readWaboxEnv(env: NodeJS.ProcessEnv = process.env): WaboxEnvConf
     logDir: env.WABOX_LOG_DIR?.trim() || undefined,
     dockerImage: env.WABOX_DOCKER_IMAGE?.trim() || undefined,
     benchmarkIterations: parsePositiveInt(env.WABOX_BENCHMARK_ITERATIONS),
+    toolsDir: env.WABOX_TOOLS_DIR?.trim() || undefined,
   };
 }
-
-/** Apply WABOX_* env defaults; explicit `options` win. */
 export function mergeAgentSandboxOptions(
   options: AgentSandboxOptions = {},
   env: WaboxEnvConfig = readWaboxEnv(),

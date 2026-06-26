@@ -1,17 +1,42 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolvePresetToolDirectories } from '../../src/policy/resolve-tool-paths.js';
+import { normalizePath } from '../../src/domain/path-utils.js';
+import {
+  resolveExecutableOnPath,
+  resolveMinimalMirrorPaths,
+  resolvePresetToolDirectories,
+  resolveWindowsSystemReadonlyPaths,
+} from '../../src/policy/resolve-tool-paths.js';
 import { buildPolicy } from '../../src/policy/build-policy.js';
 
-describe('resolvePresetToolDirectories', () => {
-  it('resolves node directory from PATH containing process.execPath', () => {
-    const nodeDir = path.dirname(process.execPath);
-    const { paths, toolsFound } = resolvePresetToolDirectories({
-      PATH: nodeDir,
-    });
+describe('resolveExecutableOnPath', () => {
+  it('finds node on the host PATH', () => {
+    if (process.platform !== 'win32') return;
+    expect(resolveExecutableOnPath('node', process.env)).toBeTruthy();
+  });
+});
 
-    expect(paths).toContain(nodeDir);
-    expect(toolsFound).toContain('node');
+describe('resolvePresetToolDirectories', () => {
+  it('resolves tool directories or warns on drive-root installs', () => {
+    const result = resolvePresetToolDirectories(process.env);
+    if (result.toolsFound.includes('node')) {
+      expect(result.paths.length).toBeGreaterThan(0);
+    } else {
+      expect(result.warnings.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('resolveMinimalMirrorPaths', () => {
+  it('includes Windows system dirs on win32', () => {
+    if (process.platform !== 'win32') return;
+
+    const { paths } = resolveMinimalMirrorPaths(process.env);
+    const system = resolveWindowsSystemReadonlyPaths(process.env);
+    const normalizedPaths = paths.map(normalizePath);
+    for (const p of system) {
+      expect(normalizedPaths).toContain(normalizePath(p));
+    }
   });
 });
 
@@ -32,7 +57,6 @@ describe('buildPolicy minimal mirror', () => {
     expect(minimal.policy.filesystem?.readonlyPaths?.length ?? 0).toBeLessThan(
       full.policy.filesystem?.readonlyPaths?.length ?? 0,
     );
-    expect(minimal.mirroredEnv.toolsFound).toContain('node');
   });
 
   it('workspace-only mirror adds no PATH readonly paths', () => {

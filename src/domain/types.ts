@@ -72,6 +72,7 @@ export interface MirroredEnvInfo {
   readonlyPathsDropped?: string[];
   toolsFound: string[];
   toolsNotFound: string[];
+  warnings?: string[];
 }
 
 export interface ResolvedPolicy extends WaboxPolicy {

@@ -3,8 +3,11 @@ import type { SandboxPolicy } from '@microsoft/mxc-sdk';
 import type { ChildProcess } from 'node:child_process';
 import { WaboxError } from '../domain/errors.js';
 import { toMxcPolicy } from '../policy/to-mxc-policy.js';
+import { prepareWindowsCommandLine, quoteWindowsCommandLine } from '../policy/windows-command.js';
 import type { WaboxPolicy } from '../domain/types.js';
 import { execLog, isExecDebugEnabled } from './exec-log.js';
+
+export { quoteWindowsCommandLine } from '../policy/windows-command.js';
 
 export interface MxcExecOptions {
   cwd?: string;
@@ -16,28 +19,6 @@ export interface MxcExecResult {
   exitCode: number;
   stdout: string;
   stderr: string;
-}
-
-/**
- * MXC rejects unquoted Windows paths containing spaces at parse time.
- * Quote only the leading executable token when needed.
- */
-export function quoteWindowsCommandLine(command: string): string {
-  const trimmed = command.trim();
-  if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
-    return trimmed;
-  }
-
-  const winExecutable = /^(.+?\.exe)(\s+.*)?$/i.exec(trimmed);
-  if (winExecutable) {
-    const executable = winExecutable[1];
-    const rest = winExecutable[2] ?? '';
-    if (executable.includes(' ')) {
-      return `"${executable}"${rest}`;
-    }
-  }
-
-  return trimmed;
 }
 
 function envRecordToMxcEnv(env?: Record<string, string>): string[] | undefined {
@@ -53,10 +34,12 @@ export async function execInMxcSandbox(
   const startedAt = Date.now();
   const mxcPolicy: SandboxPolicy = toMxcPolicy({ policy, command });
   const timeoutMs = options.timeoutMs ?? policy.timeoutMs ?? 120_000;
-  const quotedCommand = quoteWindowsCommandLine(command);
+  const preparedCommand = prepareWindowsCommandLine(command);
+  const quotedCommand = quoteWindowsCommandLine(preparedCommand);
 
   execLog('begin', {
     command,
+    preparedCommand: preparedCommand !== command ? preparedCommand : undefined,
     quotedCommand,
     timeoutMs,
     readonlyPaths: policy.filesystem?.readonlyPaths?.length ?? 0,

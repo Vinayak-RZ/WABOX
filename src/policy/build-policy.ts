@@ -8,7 +8,7 @@ import { sanitizeMirroredReadonlyPaths } from './sanitize-paths.js';
 import { execLog } from '../infrastructure/exec-log.js';
 import { NODE_DEV_EXPECTED_TOOLS } from '../presets/node-dev.js';
 import { getPreset } from '../presets/registry.js';
-import { resolvePresetToolDirectories } from './resolve-tool-paths.js';
+import { resolveMinimalMirrorPaths } from './resolve-tool-paths.js';
 
 export interface BuildPolicyInput {
   preset: PresetName;
@@ -69,6 +69,7 @@ function applyReadonlyMirror(
   mirrorMode: 'full' | 'minimal',
 ): { merged: WaboxPolicy; kept: string[]; dropped: string[]; added: string[] } {
   const { kept, dropped } = sanitizeMirroredReadonlyPaths(rawPaths);
+  const finalPaths = kept;
 
   if (dropped.length > 0) {
     execLog('mirror:sanitized', {
@@ -83,11 +84,11 @@ function applyReadonlyMirror(
     ...merged,
     filesystem: {
       ...merged.filesystem,
-      readonlyPaths: unionPaths(merged.filesystem?.readonlyPaths, kept),
+      readonlyPaths: unionPaths(merged.filesystem?.readonlyPaths, finalPaths),
     },
   };
   const after = next.filesystem?.readonlyPaths?.length ?? 0;
-  const added = after > before ? kept : [];
+  const added = after > before ? finalPaths : [];
 
   execLog('mirror:policy', {
     mirrorMode,
@@ -95,7 +96,7 @@ function applyReadonlyMirror(
     readwritePathCount: next.filesystem?.readwritePaths?.length ?? 0,
   });
 
-  return { merged: next, kept, dropped, added };
+  return { merged: next, kept: finalPaths, dropped, added };
 }
 
 export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
@@ -107,6 +108,8 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
   let readonlyPathsDropped: string[] = [];
   let toolsFound: string[] = [];
   let toolsNotFound: string[] = [];
+  let mirrorWarnings: string[] = [];
+  const toolsDir = process.env.WABOX_TOOLS_DIR?.trim();
 
   if (mirrorMode === 'full') {
     const tools = getAvailableToolsPolicy(process.env);
@@ -118,13 +121,15 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
     toolsFound = toolDetection.found;
     toolsNotFound = toolDetection.notFound;
   } else if (mirrorMode === 'minimal') {
-    const resolved = resolvePresetToolDirectories(process.env);
+    const extraPaths = toolsDir ? [toolsDir] : [];
+    const resolved = resolveMinimalMirrorPaths(process.env, extraPaths);
     const applied = applyReadonlyMirror(merged, resolved.paths, 'minimal');
     merged = applied.merged;
     readonlyPathsDropped = applied.dropped;
     mirroredPathsAdded.push(...applied.added);
     toolsFound = resolved.toolsFound;
     toolsNotFound = resolved.toolsNotFound;
+    mirrorWarnings = resolved.warnings;
   } else {
     const toolDetection = detectToolsOnPath(process.env);
     toolsFound = toolDetection.found;
@@ -164,6 +169,7 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
       readonlyPathsDropped: readonlyPathsDropped.length ? readonlyPathsDropped : undefined,
       toolsFound,
       toolsNotFound,
+      warnings: mirrorWarnings.length ? mirrorWarnings : undefined,
     },
   };
 }

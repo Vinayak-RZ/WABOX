@@ -204,7 +204,7 @@ Validated on this host (Run 2):
 
 | Issue | Symptom | Likely fix |
 |-------|---------|------------|
-| **Minimal mirror too narrow for `node.exe`** | `0xC0000142` in ~1.3 s | Add required readonly paths (Node install dir, `System32`, MSVC runtime dirs) — not just one deduped PATH folder |
+| **Node on drive root (`D:\node.exe`)** | `0xC0000142`, mirror warns | Move Node/npm into a subfolder (e.g. `D:\nodejs`) and set `WABOX_TOOLS_DIR=D:/nodejs` — do **not** mirror bare `D:\` |
 | **`npm` is a `.cmd` shim** | CreateProcessW file not found | Resolve to `npm.cmd` or run `cmd /c npm --version` in benchmark + exec layer |
 | **`D:\` workspace cold DACL** | First spawn ~274 s | Document; consider `wxc-host-prep` for data drive or move workspace to `C:\` for dev |
 | **Diagnose only tests `cmd`** | Green diagnose, red node | Extend diagnose to run `node -e` and `npm --version` |

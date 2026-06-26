@@ -4,7 +4,7 @@ import { buildPolicy } from '../../src/policy/build-policy.js';
 import { toMxcPolicy } from '../../src/policy/to-mxc-policy.js';
 import { MXC_SCHEMA_VERSION } from '../../src/infrastructure/mxc-constants.js';
 import { commandRequiresWindowsUi } from '../../src/policy/shell-detect.js';
-import { quoteWindowsCommandLine } from '../../src/infrastructure/mxc-adapter.js';
+import { quoteWindowsCommandLine } from '../../src/policy/windows-command.js';
 
 describe('path-utils', () => {
   it('deduplicates paths case-insensitively on Windows', () => {
