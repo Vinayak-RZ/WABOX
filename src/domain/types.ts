@@ -19,12 +19,15 @@ export interface WaboxPolicy {
   timeoutMs?: number;
 }
 
+/** `true` (default): mirror every PATH dir MXC discovers. `'minimal'`: preset tool dirs only. `false`: none. */
+export type MirrorEnvMode = boolean | 'minimal';
+
 export interface AgentSandboxOptions {
   agentId?: string;
   sessionLabel?: string;
   preset?: PresetName;
   policy?: Partial<WaboxPolicy>;
-  mirrorEnv?: boolean;
+  mirrorEnv?: MirrorEnvMode;
   logDir?: string;
 }
 
@@ -62,6 +65,8 @@ export interface ActionLog {
 }
 
 export interface MirroredEnvInfo {
+  /** How PATH/tool paths were mirrored into readonly policy */
+  mirrorMode?: 'full' | 'minimal' | 'none';
   readonlyPathsAdded: string[];
   /** Paths MXC wanted but WABOX dropped (e.g. drive roots) */
   readonlyPathsDropped?: string[];

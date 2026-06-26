@@ -8,6 +8,7 @@ export type {
   AgentSandboxOptions,
   ExecOptions,
   ExecResult,
+  MirrorEnvMode,
   MirroredEnvInfo,
   PresetName,
   ResolvedPolicy,

@@ -39,9 +39,26 @@ Plain-language definitions for terms you'll see in code, logs, and MXC stderr.
 
 ## PATH mirroring (`mirrorEnv`)
 
-**What:** WABOX copies your host PATH tool locations into the sandbox as **readonly** paths so `node`, `npm`, `git` work at their real locations.
+**What:** WABOX copies host tool locations into the sandbox as **readonly** paths so `node`, `npm`, `git` work at their real locations.
 
-**How:** MXC `getAvailableToolsPolicy(process.env)` enumerates PATH entries.
+**Modes:**
+
+| `mirrorEnv` | DACL scope | Use when |
+|-------------|------------|----------|
+| `true` (default) | Every PATH dir MXC discovers (~40+ paths) | Maximum tool compatibility |
+| `'minimal'` | Only dirs containing `node` / `npm` / `npx` / `git` (~2–4 paths) | Faster spawns on `appcontainer-dacl` |
+| `false` | No PATH mirror — workspace + temp only | Read-only workspace experiments; **host `node` won't run** |
+
+**Workspace alone is not enough** for the `node-dev` preset: `node.exe` lives outside `D:\Tech\WABOX`. MXC DACL-walks every path listed in the policy — not your whole drive — but full PATH mirror lists dozens of folders.
+
+```ts
+createAgentSandbox({
+  mirrorEnv: 'minimal',
+  policy: { filesystem: { workspacePath: 'D:/Tech/WABOX' } },
+});
+```
+
+**How (full mode):** MXC `getAvailableToolsPolicy(process.env)` enumerates PATH entries.
 
 **Risk:** If PATH contains `D:\`, MXC tries to DACL the entire drive — very slow.
 

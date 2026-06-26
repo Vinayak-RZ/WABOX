@@ -16,6 +16,8 @@ async function main(): Promise<void> {
     preset: 'node-dev',
     agentId: 'minimal-example',
     sessionLabel: 'MVP smoke run',
+    // Fewer MXC DACL paths than full PATH mirror — use true for maximum tool coverage.
+    mirrorEnv: 'minimal',
     policy: {
       filesystem: {
         workspacePath: process.cwd(),
@@ -25,6 +27,7 @@ async function main(): Promise<void> {
 
   console.log('Session:', sandbox.sessionId);
   console.log('Mirrored tools:', sandbox.mirroredEnv.toolsFound.join(', ') || '(none detected on PATH)');
+  console.log('Mirror mode:', sandbox.mirroredEnv.mirrorMode ?? 'full');
 
   const install = await sandbox.exec('node -e "console.log(1+1)"', { label: 'smoke' });
   console.log('exec exit:', install.exitCode);
