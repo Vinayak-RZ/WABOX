@@ -4,6 +4,7 @@ import type { ChildProcess } from 'node:child_process';
 import { WaboxError } from '../domain/errors.js';
 import { toMxcPolicy } from '../policy/to-mxc-policy.js';
 import type { WaboxPolicy } from '../domain/types.js';
+import { execLog, isExecDebugEnabled } from './exec-log.js';
 
 export interface MxcExecOptions {
   cwd?: string;
@@ -49,11 +50,22 @@ export async function execInMxcSandbox(
   command: string,
   options: MxcExecOptions = {},
 ): Promise<MxcExecResult> {
+  const startedAt = Date.now();
   const mxcPolicy: SandboxPolicy = toMxcPolicy({ policy, command });
   const timeoutMs = options.timeoutMs ?? policy.timeoutMs ?? 120_000;
+  const quotedCommand = quoteWindowsCommandLine(command);
+
+  execLog('begin', {
+    command,
+    quotedCommand,
+    timeoutMs,
+    readonlyPaths: policy.filesystem?.readonlyPaths?.length ?? 0,
+    readwritePaths: policy.filesystem?.readwritePaths?.length ?? 0,
+    deniedPaths: policy.filesystem?.deniedPaths?.length ?? 0,
+  });
 
   const config = createConfigFromPolicy(mxcPolicy, 'process');
-  config.process!.commandLine = quoteWindowsCommandLine(command);
+  config.process!.commandLine = quotedCommand;
   if (options.cwd) {
     config.process!.cwd = options.cwd;
   }
@@ -65,11 +77,15 @@ export async function execInMxcSandbox(
     config.process!.timeout = timeoutMs;
   }
 
+  execLog('spawn:starting', { note: 'Launching wxc-exec.exe — DACL setup may take minutes on first run' });
+
   return new Promise<MxcExecResult>((resolve, reject) => {
     let child: ChildProcess;
     try {
       child = spawnSandboxFromConfig(config, { usePty: false }, options.cwd) as ChildProcess;
+      execLog('spawn:pid', { pid: child.pid ?? 'unknown' });
     } catch (error) {
+      execLog('spawn:failed', { error: error instanceof Error ? error.message : String(error) });
       reject(
         new WaboxError({
           code: 'SANDBOX_SPAWN_FAILED',
@@ -83,22 +99,46 @@ export async function execInMxcSandbox(
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let firstOutputAt: number | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
+
+    if (isExecDebugEnabled()) {
+      heartbeat = setInterval(() => {
+        const elapsed = Date.now() - startedAt;
+        execLog('spawn:waiting', {
+          elapsedMs: elapsed,
+          stdoutBytes: stdout.length,
+          stderrBytes: stderr.length,
+          hint:
+            elapsed > 60_000
+              ? 'Still in wxc-exec (DACL recovery?). Try: wxc-host-prep prepare-system-drive (elevated)'
+              : 'wxc-exec working…',
+        });
+      }, 10_000);
+    }
 
     const finish = (handler: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (heartbeat) clearInterval(heartbeat);
       handler();
     };
 
     const timer = setTimeout(() => {
+      execLog('spawn:timeout', {
+        timeoutMs,
+        elapsedMs: Date.now() - startedAt,
+        stdoutPreview: stdout.slice(0, 200),
+        stderrPreview: stderr.slice(0, 500),
+      });
       child.kill();
       finish(() => {
         reject(
           new WaboxError({
             code: 'EXEC_TIMEOUT',
             message: `Command timed out after ${timeoutMs}ms`,
-            details: { command, timeoutMs },
+            details: { command, timeoutMs, stderrTail: stderr.slice(-1000) },
           }),
         );
       });
@@ -107,13 +147,30 @@ export async function execInMxcSandbox(
     child.stdin?.end();
 
     child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
+      if (firstOutputAt === undefined) {
+        firstOutputAt = Date.now() - startedAt;
+        execLog('spawn:first_stdout', { afterMs: firstOutputAt });
+      }
+      const text = chunk.toString();
+      stdout += text;
+      if (isExecDebugEnabled()) {
+        process.stderr.write(`[wabox:stdout] ${text}`);
+      }
     });
     child.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString();
+      if (firstOutputAt === undefined) {
+        firstOutputAt = Date.now() - startedAt;
+        execLog('spawn:first_stderr', { afterMs: firstOutputAt });
+      }
+      const text = chunk.toString();
+      stderr += text;
+      if (isExecDebugEnabled()) {
+        process.stderr.write(`[wabox:stderr] ${text}`);
+      }
     });
 
     child.on('error', (error) => {
+      execLog('spawn:error', { message: error.message });
       finish(() => {
         reject(
           new WaboxError({
@@ -126,6 +183,12 @@ export async function execInMxcSandbox(
     });
 
     child.on('close', (code) => {
+      execLog('spawn:close', {
+        exitCode: code,
+        durationMs: Date.now() - startedAt,
+        stdoutBytes: stdout.length,
+        stderrBytes: stderr.length,
+      });
       finish(() => {
         resolve({
           exitCode: code ?? -1,

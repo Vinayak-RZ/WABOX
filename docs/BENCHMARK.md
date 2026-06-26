@@ -57,9 +57,22 @@ Results are written to `.wabox/benchmarks/wabox-vs-docker-<timestamp>.json`.
 
 ### Prerequisites
 
-- Windows 11 24H2+ with MXC working (`npm run spike` passes)
-- Docker Desktop running
+- Windows 11 24H2+ with MXC working (`npm run spike` or `npm run diagnose` passes)
+- Docker Desktop running (for full comparison)
 - Optional: `wxc-host-prep prepare-system-drive` (elevated) if MXC cold start is very slow
+
+### Debugging hangs
+
+If the benchmark stops at `WABOX...` with no output for minutes:
+
+```powershell
+$env:WABOX_DEBUG = "1"
+npm run diagnose
+```
+
+**What is happening:** WABOX spawns `wxc-exec.exe` (MXC native binary). On the `appcontainer-dacl` tier, wxc-exec may run **DACL recovery** across every path in the sandbox policy before your command runs. A bloated PATH mirror (e.g. entire `D:\` on PATH) makes this extremely slow. WABOX now drops drive-root paths automatically; host prep still helps.
+
+See [docs/MVP_LIMITATIONS.md](MVP_LIMITATIONS.md).
 
 ## Interpreting results
 

@@ -4,6 +4,8 @@ import {
 } from '@microsoft/mxc-sdk';
 import type { MirroredEnvInfo, PresetName, ResolvedPolicy, WaboxPolicy } from '../domain/types.js';
 import { unionPaths } from '../domain/path-utils.js';
+import { sanitizeMirroredReadonlyPaths } from './sanitize-paths.js';
+import { execLog } from '../infrastructure/exec-log.js';
 import { NODE_DEV_EXPECTED_TOOLS } from '../presets/node-dev.js';
 import { getPreset } from '../presets/registry.js';
 
@@ -60,21 +62,38 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
   let merged = mergeWaboxPolicy(presetPolicy, input.overrides);
 
   const mirroredPathsAdded: string[] = [];
+  let readonlyPathsDropped: string[] = [];
 
   if (mirrorEnv) {
     const tools = getAvailableToolsPolicy(process.env);
+    const { kept, dropped } = sanitizeMirroredReadonlyPaths(tools.readonlyPaths ?? []);
+    readonlyPathsDropped = dropped;
+
+    if (dropped.length > 0) {
+      execLog('mirror:sanitized', {
+        droppedCount: dropped.length,
+        droppedSample: dropped.slice(0, 5),
+        reason: 'Drive roots and overly broad PATH entries slow MXC DACL setup',
+      });
+    }
+
     const before = merged.filesystem?.readonlyPaths?.length ?? 0;
     merged = {
       ...merged,
       filesystem: {
         ...merged.filesystem,
-        readonlyPaths: unionPaths(merged.filesystem?.readonlyPaths, tools.readonlyPaths),
+        readonlyPaths: unionPaths(merged.filesystem?.readonlyPaths, kept),
       },
     };
     const after = merged.filesystem?.readonlyPaths?.length ?? 0;
     if (after > before) {
-      mirroredPathsAdded.push(...(tools.readonlyPaths ?? []));
+      mirroredPathsAdded.push(...kept);
     }
+
+    execLog('mirror:policy', {
+      readonlyPathCount: merged.filesystem?.readonlyPaths?.length ?? 0,
+      readwritePathCount: merged.filesystem?.readwritePaths?.length ?? 0,
+    });
   }
 
   const temp = getTemporaryFilesPolicy();
@@ -108,6 +127,7 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
     policy,
     mirroredEnv: {
       readonlyPathsAdded: mirroredPathsAdded,
+      readonlyPathsDropped: readonlyPathsDropped.length ? readonlyPathsDropped : undefined,
       toolsFound: toolDetection.found,
       toolsNotFound: toolDetection.notFound,
     },

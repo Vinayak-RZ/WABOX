@@ -85,6 +85,15 @@ interface BenchmarkReport {
   }>;
 }
 
+function logBench(message: string, detail?: Record<string, unknown>): void {
+  const ts = new Date().toISOString().slice(11, 23);
+  if (detail) {
+    console.log(`[bench ${ts}] ${message}`, detail);
+  } else {
+    console.log(`[bench ${ts}] ${message}`);
+  }
+}
+
 function parseArgs(argv: string[]): {
   iterations: number;
   dockerImage: string;
@@ -239,6 +248,12 @@ async function benchmarkWabox(
   let coldStartMs: number | null = null;
 
   for (let i = 0; i < iterations; i++) {
+    logBench(`WABOX iteration ${i + 1}/${iterations}`, {
+      case: benchCase.id,
+      command: benchCase.waboxCommand,
+      hint: 'Enable WABOX_DEBUG=1 for wxc-exec live stderr',
+    });
+
     const sandbox = createAgentSandbox({
       preset: 'node-dev',
       sessionLabel: `benchmark-${benchCase.id}`,
@@ -254,6 +269,11 @@ async function benchmarkWabox(
       });
       const durationMs = Date.now() - started;
       if (coldStartMs === null) coldStartMs = durationMs;
+      logBench('WABOX iteration done', {
+        exitCode: result.exitCode,
+        durationMs,
+        stdoutLen: result.stdout.length,
+      });
       samples.push({
         iteration: i + 1,
         durationMs,
@@ -264,12 +284,14 @@ async function benchmarkWabox(
     } catch (error) {
       const durationMs = Date.now() - started;
       if (coldStartMs === null) coldStartMs = durationMs;
+      const msg = error instanceof Error ? error.message : String(error);
+      logBench('WABOX iteration failed', { durationMs, error: msg });
       samples.push({
         iteration: i + 1,
         durationMs,
         exitCode: -1,
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: msg,
       });
     } finally {
       await sandbox.destroy().catch(() => undefined);
@@ -397,6 +419,19 @@ async function main(): Promise<void> {
     console.error('WABOX not supported on this host:');
     for (const e of support.errors) console.error(' -', e);
     process.exit(1);
+  }
+
+  logBench('MXC preflight', {
+    isolationTier: support.isolationTier,
+    backends: support.availableBackends,
+    warnings: support.isolationWarnings?.length ?? 0,
+  });
+  if (support.isolationWarnings?.length) {
+    for (const w of support.isolationWarnings) {
+      console.warn(`  MXC: ${w}`);
+    }
+    console.warn('  → If benchmark hangs, run elevated: wxc-host-prep prepare-system-drive');
+    console.warn('  → For live spawn logs: set WABOX_DEBUG=1\n');
   }
 
   let dockerMeta: BenchmarkReport['docker'] = {

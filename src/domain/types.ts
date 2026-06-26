@@ -63,6 +63,8 @@ export interface ActionLog {
 
 export interface MirroredEnvInfo {
   readonlyPathsAdded: string[];
+  /** Paths MXC wanted but WABOX dropped (e.g. drive roots) */
+  readonlyPathsDropped?: string[];
   toolsFound: string[];
   toolsNotFound: string[];
 }

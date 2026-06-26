@@ -1,10 +1,20 @@
 import { getPlatformSupport } from '@microsoft/mxc-sdk';
+import type { PlatformSupport } from '@microsoft/mxc-sdk';
 import os from 'node:os';
 import { WaboxError } from '../domain/errors.js';
 import type { SupportStatus } from '../domain/types.js';
 
+let cachedMxcPlatform: PlatformSupport | undefined;
+
+function getMxcPlatform(): PlatformSupport {
+  if (!cachedMxcPlatform) {
+    cachedMxcPlatform = getPlatformSupport();
+  }
+  return cachedMxcPlatform;
+}
+
 export function getSupportStatus(): SupportStatus {
-  const mxc = getPlatformSupport();
+  const mxc = getMxcPlatform();
   const errors: string[] = [];
 
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);

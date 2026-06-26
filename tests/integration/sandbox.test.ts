@@ -47,5 +47,5 @@ describe('getSupportStatus', () => {
     expect(status.nodeVersion).toBeTruthy();
     expect(Array.isArray(status.availableBackends)).toBe(true);
     expect(typeof status.supported).toBe('boolean');
-  });
+  }, 30_000);
 });
