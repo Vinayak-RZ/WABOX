@@ -1,4 +1,4 @@
-import './bootstrap-env.js';
+import '../scripts/bootstrap-env.js';
 import { createAgentSandbox, getSupportStatus } from '../src/index.js';
 
 async function main(): Promise<void> {
