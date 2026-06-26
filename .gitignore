@@ -19,8 +19,10 @@ out/
 Thumbs.db
 *.log
 
-# Cursor local cache
-.cursor/skills-catalog/.cache/
-
-# WABOX runtime
+# WABOX runtime (session logs, benchmark output — local only)
 .wabox/
+
+# Local development — not published to the public repo
+learning/
+.cursor/
+AGENTS.md
