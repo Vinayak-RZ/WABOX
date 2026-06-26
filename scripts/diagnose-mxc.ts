@@ -1,12 +1,14 @@
 /**
  * Step-by-step MXC diagnostic — run before benchmark when WABOX appears to hang.
  *
- *   set WABOX_DEBUG=1
  *   npm run diagnose
+ *   (configure via .env — WABOX_MIRROR_ENV, WABOX_DEBUG, etc.)
  */
+import './bootstrap-env.js';
 import { getAvailableToolsPolicy, getPlatformSupport, getTemporaryFilesPolicy } from '@microsoft/mxc-sdk';
 import { buildPolicy } from '../src/policy/build-policy.js';
 import { execInMxcSandbox } from '../src/infrastructure/mxc-adapter.js';
+import { mergeAgentSandboxOptions } from '../src/infrastructure/wabox-env.js';
 import { sanitizeMirroredReadonlyPaths } from '../src/policy/sanitize-paths.js';
 
 async function main(): Promise<void> {
@@ -30,12 +32,17 @@ async function main(): Promise<void> {
     console.log('   Dropped (drive roots / too broad):', dropped);
   }
 
+  const merged = mergeAgentSandboxOptions({
+    preset: 'node-dev',
+    policy: { filesystem: { workspacePath: process.cwd() } },
+  });
   const { policy, mirroredEnv } = buildPolicy({
     preset: 'node-dev',
-    mirrorEnv: true,
-    overrides: { filesystem: { workspacePath: process.cwd() } },
+    mirrorEnv: merged.mirrorEnv,
+    overrides: merged.policy,
   });
   console.log('\n3. Resolved WABOX policy');
+  console.log(`   mirror mode: ${mirroredEnv.mirrorMode ?? 'full'}`);
   console.log(`   readonly: ${policy.filesystem?.readonlyPaths?.length ?? 0}`);
   console.log(`   readwrite: ${policy.filesystem?.readwritePaths?.length ?? 0}`);
   console.log(`   tools on PATH: ${mirroredEnv.toolsFound.join(', ') || '(none)'}`);
@@ -49,7 +56,9 @@ async function main(): Promise<void> {
   console.log('\n4. Test exec (cmd /c echo diagnose-ok)');
   console.log('   Set WABOX_DEBUG=1 to see wxc-exec stderr live.\n');
 
-  const result = await execInMxcSandbox(policy, 'cmd /c echo diagnose-ok', { timeoutMs: 300_000 });
+  const result = await execInMxcSandbox(policy, 'cmd /c echo diagnose-ok', {
+    timeoutMs: merged.policy?.timeoutMs ?? 300_000,
+  });
   console.log('\n5. Result');
   console.log(`   exitCode: ${result.exitCode}`);
   console.log(`   stdout: ${result.stdout.trim()}`);

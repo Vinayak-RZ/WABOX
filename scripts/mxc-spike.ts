@@ -2,6 +2,7 @@
  * Phase 0 spike — verify MXC works on this host before building WABOX abstractions.
  * Run: npm run spike
  */
+import './bootstrap-env.js';
 import {
   createConfigFromPolicy,
   getAvailableToolsPolicy,

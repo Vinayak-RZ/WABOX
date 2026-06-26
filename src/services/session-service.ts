@@ -6,6 +6,7 @@ import type {
 } from '../domain/types.js';
 import { DEFAULT_SESSION_LOG_DIR } from '../infrastructure/mxc-constants.js';
 import { assertPlatformSupported } from '../infrastructure/platform.js';
+import { mergeAgentSandboxOptions } from '../infrastructure/wabox-env.js';
 import { buildPolicy } from '../policy/build-policy.js';
 import { AgentSandbox } from '../sandbox/agent-sandbox.js';
 
@@ -23,22 +24,23 @@ export interface SessionContext {
 export function createSessionContext(options: AgentSandboxOptions): SessionContext {
   assertPlatformSupported();
 
-  const preset = options.preset ?? 'node-dev';
+  const resolved = mergeAgentSandboxOptions(options);
+  const preset = resolved.preset ?? 'node-dev';
   const { policy, mirroredEnv } = buildPolicy({
     preset,
-    overrides: options.policy,
-    mirrorEnv: options.mirrorEnv,
+    overrides: resolved.policy,
+    mirrorEnv: resolved.mirrorEnv,
   });
 
   return {
     sessionId: `wabox-${randomUUID()}`,
-    agentId: options.agentId,
-    sessionLabel: options.sessionLabel,
+    agentId: resolved.agentId,
+    sessionLabel: resolved.sessionLabel,
     startedAt: new Date().toISOString(),
     preset,
     policy,
     mirroredEnv,
-    logDir: options.logDir ?? DEFAULT_SESSION_LOG_DIR,
+    logDir: resolved.logDir ?? DEFAULT_SESSION_LOG_DIR,
   };
 }
 

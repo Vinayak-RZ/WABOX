@@ -72,10 +72,15 @@ npm run example
 
 ## Development
 
+Copy [`.env.example`](.env.example) to `.env` for local defaults (`WABOX_MIRROR_ENV=minimal`, workspace path, timeouts, debug).
+
 ```bash
+cp .env.example .env   # or copy on Windows
 npm run build          # compile to dist/
 npm test               # unit tests (CI-safe)
 npm run test:integration   # Windows sandbox spawn (set WABOX_INTEGRATION=1)
+npm run diagnose       # MXC preflight (reads .env)
+npm run example        # smoke test via createAgentSandbox
 npm run spike          # raw MXC Phase 0 smoke test
 ```
 

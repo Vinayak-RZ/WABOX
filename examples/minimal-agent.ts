@@ -1,3 +1,4 @@
+import './bootstrap-env.js';
 import { createAgentSandbox, getSupportStatus } from '../src/index.js';
 
 async function main(): Promise<void> {
@@ -16,8 +17,6 @@ async function main(): Promise<void> {
     preset: 'node-dev',
     agentId: 'minimal-example',
     sessionLabel: 'MVP smoke run',
-    // Fewer MXC DACL paths than full PATH mirror — use true for maximum tool coverage.
-    mirrorEnv: 'minimal',
     policy: {
       filesystem: {
         workspacePath: process.cwd(),

@@ -7,12 +7,14 @@
  *
  * Results: .wabox/benchmarks/<timestamp>.json
  */
+import './bootstrap-env.js';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgentSandbox, getSupportStatus } from '../src/index.js';
+import { readWaboxEnv } from '../src/infrastructure/wabox-env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -99,8 +101,9 @@ function parseArgs(argv: string[]): {
   dockerImage: string;
   waboxOnly: boolean;
 } {
-  let iterations = 3;
-  let dockerImage = 'node:22-alpine';
+  const env = readWaboxEnv();
+  let iterations = env.benchmarkIterations ?? 3;
+  let dockerImage = env.dockerImage ?? 'node:22-alpine';
   let waboxOnly = false;
 
   for (let i = 0; i < argv.length; i++) {
@@ -457,8 +460,9 @@ async function main(): Promise<void> {
     console.log('WABOX-only mode (skipping Docker).');
   }
 
-  const execTimeoutMs = 180_000;
-  const workspace = REPO_ROOT;
+  const envConfig = readWaboxEnv();
+  const execTimeoutMs = envConfig.execTimeoutMs ?? 180_000;
+  const workspace = envConfig.workspacePath ?? REPO_ROOT;
   const outDir = path.join(REPO_ROOT, '.wabox', 'benchmarks');
   await fs.mkdir(outDir, { recursive: true });
 
