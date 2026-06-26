@@ -85,9 +85,14 @@ interface BenchmarkReport {
   }>;
 }
 
-function parseArgs(argv: string[]): { iterations: number; dockerImage: string } {
+function parseArgs(argv: string[]): {
+  iterations: number;
+  dockerImage: string;
+  waboxOnly: boolean;
+} {
   let iterations = 3;
   let dockerImage = 'node:22-alpine';
+  let waboxOnly = false;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--iterations' && argv[i + 1]) {
@@ -96,9 +101,12 @@ function parseArgs(argv: string[]): { iterations: number; dockerImage: string } 
     if (argv[i] === '--docker-image' && argv[i + 1]) {
       dockerImage = argv[++i];
     }
+    if (argv[i] === '--wabox-only') {
+      waboxOnly = true;
+    }
   }
 
-  return { iterations, dockerImage };
+  return { iterations, dockerImage, waboxOnly };
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -172,6 +180,13 @@ async function runDocker(
 }
 
 async function ensureDockerImage(image: string): Promise<{ version: string; pullMs?: number }> {
+  const running = await isDockerDaemonRunning();
+  if (!running) {
+    throw new Error(
+      'Docker daemon is not running. Start Docker Desktop, or use --wabox-only to benchmark WABOX without Docker.',
+    );
+  }
+
   const version = await new Promise<string>((resolve, reject) => {
     const child = spawn('docker', ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
@@ -204,6 +219,14 @@ async function ensureDockerImage(image: string): Promise<{ version: string; pull
   });
 
   return { version, pullMs: Date.now() - pullStarted };
+}
+
+async function isDockerDaemonRunning(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn('docker', ['info'], { stdio: 'ignore' });
+    child.on('close', (code) => resolve(code === 0));
+    child.on('error', () => resolve(false));
+  });
 }
 
 async function benchmarkWabox(
@@ -322,7 +345,7 @@ function printSummary(report: BenchmarkReport): void {
   console.log('═══════════════════════════════════════════════════════════');
   console.log(`Host: ${report.host.platform} · Node ${report.host.nodeVersion}`);
   console.log(`WABOX tier: ${report.wabox.isolationTier ?? 'unknown'}`);
-  console.log(`Docker: ${report.docker.version ?? 'n/a'} · image ${report.docker.image}`);
+  console.log(`Docker: ${report.docker.version ?? (report.docker.available ? 'running' : 'skipped')} · image ${report.docker.image}`);
   if (report.docker.imagePullMs) {
     console.log(`Docker image pull (one-time): ${report.docker.imagePullMs}ms`);
   }
@@ -367,7 +390,7 @@ const BENCH_CASES: BenchCase[] = [
 ];
 
 async function main(): Promise<void> {
-  const { iterations, dockerImage } = parseArgs(process.argv.slice(2));
+  const { iterations, dockerImage, waboxOnly } = parseArgs(process.argv.slice(2));
   const support = getSupportStatus();
 
   if (!support.supported) {
@@ -376,8 +399,28 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log('Ensuring Docker image...');
-  const dockerInfo = await ensureDockerImage(dockerImage);
+  let dockerMeta: BenchmarkReport['docker'] = {
+    available: false,
+    image: dockerImage,
+  };
+
+  if (!waboxOnly) {
+    console.log('Checking Docker...');
+    try {
+      const dockerInfo = await ensureDockerImage(dockerImage);
+      dockerMeta = {
+        available: true,
+        version: dockerInfo.version,
+        image: dockerImage,
+        imagePullMs: dockerInfo.pullMs,
+      };
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  } else {
+    console.log('WABOX-only mode (skipping Docker).');
+  }
 
   const execTimeoutMs = 180_000;
   const workspace = REPO_ROOT;
@@ -396,12 +439,7 @@ async function main(): Promise<void> {
       support,
       isolationTier: support.isolationTier,
     },
-    docker: {
-      available: true,
-      version: dockerInfo.version,
-      image: dockerImage,
-      imagePullMs: dockerInfo.pullMs,
-    },
+    docker: dockerMeta,
     methodology: {
       waboxModel: 'One MXC spawn per exec() — matches WABOX MVP',
       dockerModel: 'One docker run --rm per iteration — same one-shot agent pattern',
@@ -416,8 +454,19 @@ async function main(): Promise<void> {
     console.log(`\nBenchmarking: ${benchCase.label} (${iterations} iterations)`);
     console.log('  WABOX...');
     const wabox = await benchmarkWabox(benchCase, iterations, workspace, execTimeoutMs);
-    console.log('  Docker...');
-    const docker = await benchmarkDocker(benchCase, iterations, workspace, dockerImage, execTimeoutMs);
+
+    let docker: CaseResult;
+    if (waboxOnly) {
+      docker = {
+        case: benchCase,
+        coldStartMs: null,
+        samples: [],
+        stats: { count: 0, successRate: 0, minMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0, meanMs: 0 },
+      };
+    } else {
+      console.log('  Docker...');
+      docker = await benchmarkDocker(benchCase, iterations, workspace, dockerImage, execTimeoutMs);
+    }
 
     report.cases.push({
       caseId: benchCase.id,

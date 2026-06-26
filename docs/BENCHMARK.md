@@ -48,6 +48,9 @@ npm run benchmark
 
 # More iterations, custom image
 npm run benchmark -- --iterations 5 --docker-image node:22-alpine
+
+# WABOX only (Docker Desktop not required)
+npm run benchmark -- --wabox-only --iterations 3
 ```
 
 Results are written to `.wabox/benchmarks/wabox-vs-docker-<timestamp>.json`.
