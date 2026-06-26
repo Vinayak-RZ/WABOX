@@ -8,6 +8,8 @@
 
 Full product spec: [WABOX_SPEC.md](WABOX_SPEC.md)
 
+**Learning:** [learning/](learning/README.md) — file guide, architecture, concepts, and journal
+
 ## Requirements
 
 - **Windows 11 24H2+** (build 26100+) — MXC `processcontainer` backend
