@@ -173,7 +173,16 @@ npm run example
 npm run diagnose
 ```
 
-Runs `cmd`, `node -e`, and `npm --version` inside MXC with your `.env` policy — useful when AppContainer DACL or tool paths misbehave.
+Structured report with host-prep ACE checks, full policy path listing, timed exec tests (cmd, node, npm), and JSON output at `.wabox/diagnostics/latest.json`. Diagnose enables `WABOX_DEBUG=verbose` by default.
+
+| `WABOX_DEBUG` | Effect |
+|---------------|--------|
+| `off` / `0` | No exec logs |
+| `info` / `1` | Phase logs + smart hang hints |
+| `verbose` | + full policy paths + MXC config summary |
+| `trace` | + live stdout/stderr stream |
+
+Set `WABOX_DEBUG_JSON=1` for JSON log lines. Use `WABOX_DIAGNOSE_JSON=0` to skip writing the report file.
 
 ---
 

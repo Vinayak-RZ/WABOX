@@ -1,16 +1,21 @@
-/** Structured debug logging for MXC exec (enable with WABOX_DEBUG=1). */
+import { debugLog, getDebugLevel, isDebugAtLeast } from './debug.js';
 
+/** @deprecated Use isDebugAtLeast('info') — kept for call sites. */
 export function isExecDebugEnabled(): boolean {
-  const v = process.env.WABOX_DEBUG?.trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
+  return isDebugAtLeast('info');
+}
+
+export function isExecTraceEnabled(): boolean {
+  return isDebugAtLeast('trace');
 }
 
 export function execLog(phase: string, detail?: Record<string, unknown>): void {
-  if (!isExecDebugEnabled()) return;
-  const ts = new Date().toISOString();
-  if (detail) {
-    console.error(`[wabox:exec ${ts}] ${phase}`, detail);
-  } else {
-    console.error(`[wabox:exec ${ts}] ${phase}`);
-  }
+  debugLog('exec', phase, detail);
 }
+
+export function policyLog(phase: string, detail?: Record<string, unknown>): void {
+  if (!isDebugAtLeast('verbose')) return;
+  debugLog('policy', phase, detail);
+}
+
+export { getDebugLevel };
