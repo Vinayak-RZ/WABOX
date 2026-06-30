@@ -250,7 +250,9 @@ async function main(): Promise<void> {
         `       ${statusIcon(status === 'pass')} ${status.toUpperCase()} in ${durationMs}ms (exit=${result.exitCode})`,
       );
       if (stdout) console.log(`       stdout: ${stdout.slice(0, 200)}`);
-      if (stderr) console.log(`       stderr: ${stderr.slice(-300)}`);
+      if (result.stderr) {
+        console.log(`       stderr: ${result.stderr.slice(-500)}`);
+      }
       if (error) console.log(`       reason: ${error}`);
 
       execTests.push({

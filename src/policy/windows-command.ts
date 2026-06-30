@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { resolveExecutableOnPath } from './resolve-tool-paths.js';
+import { isNodeViaCmdEnabled } from './node-init-paths.js';
 
 /** Windows PATH shims that are `.cmd`/`.bat` — MXC must spawn via `cmd /c`. */
 export const WINDOWS_CMD_SHIMS = new Set(['npm', 'npx', 'yarn', 'pnpm']);
@@ -14,13 +15,24 @@ export function quoteWindowsCommandLine(command: string): string {
     return trimmed;
   }
 
-  const winExecutable = /^(.+?\.exe)(\s+.*)?$/i.exec(trimmed);
-  if (winExecutable) {
-    const executable = winExecutable[1];
-    const rest = winExecutable[2] ?? '';
-    if (executable.includes(' ')) {
-      return `"${executable}"${rest}`;
-    }
+  if (/^cmd(\.exe)?\s+\/c\s+/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  const leading = /^("(?:[^"]+)"|'(?:[^']+)'|(?:\S+?(?:\s+\S+)*?\.exe))(\s+[\s\S]*)?$/i.exec(trimmed);
+  if (!leading) return trimmed;
+
+  let executable = leading[1];
+  const rest = leading[2] ?? '';
+  if (
+    (executable.startsWith('"') && executable.endsWith('"')) ||
+    (executable.startsWith("'") && executable.endsWith("'"))
+  ) {
+    executable = executable.slice(1, -1);
+  }
+
+  if (executable.includes(' ')) {
+    return `"${executable}"${rest}`;
   }
 
   return trimmed;
@@ -77,12 +89,12 @@ export function prepareWindowsCommandLine(
     const resolved = resolveExecutableOnPath(baseName, env);
     if (resolved) {
       const resolvedCommand = `${resolved}${restSuffix}`;
-      if (WINDOWS_CMD_SHIMS.has(baseName)) {
+      if (WINDOWS_CMD_SHIMS.has(baseName) || (baseName === 'node' && isNodeViaCmdEnabled(env))) {
         return `cmd /c ${quoteWindowsCommandLine(resolvedCommand)}`;
       }
       return quoteWindowsCommandLine(resolvedCommand);
     }
-    if (WINDOWS_CMD_SHIMS.has(baseName)) {
+    if (WINDOWS_CMD_SHIMS.has(baseName) || (baseName === 'node' && isNodeViaCmdEnabled(env))) {
       return `cmd /c ${trimmed}`;
     }
   }

@@ -23,6 +23,12 @@ describe('prepareWindowsCommandLine', () => {
 });
 
 describe('quoteWindowsCommandLine', () => {
+  it('does not quote cmd /c chains when node.exe appears in the path', () => {
+    expect(quoteWindowsCommandLine('cmd /c D:\\nodejs\\node.exe -e "1"')).toBe(
+      'cmd /c D:\\nodejs\\node.exe -e "1"',
+    );
+  });
+
   it('quotes executables with spaces', () => {
     expect(quoteWindowsCommandLine('C:\\Program Files\\nodejs\\node.exe -v')).toBe(
       '"C:\\Program Files\\nodejs\\node.exe" -v',

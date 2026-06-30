@@ -7,6 +7,28 @@ import { isOverlyBroadFilesystemPath } from './sanitize-paths.js';
 
 const WINDOWS_TOOL_EXTENSIONS = ['.exe', '.cmd', '.bat', ''] as const;
 
+/** Prefer .exe / .cmd over extensionless shims (e.g. npm vs npm.cmd). */
+function rankWindowsExecutable(candidate: string): number {
+  const lower = candidate.toLowerCase();
+  if (lower.endsWith('.exe')) return 0;
+  if (lower.endsWith('.cmd')) return 1;
+  if (lower.endsWith('.bat')) return 2;
+  return 3;
+}
+
+function pickBestExecutable(candidates: string[]): string | undefined {
+  const existing = candidates.filter((c) => {
+    try {
+      return fs.existsSync(c);
+    } catch {
+      return false;
+    }
+  });
+  if (existing.length === 0) return undefined;
+  existing.sort((a, b) => rankWindowsExecutable(a) - rankWindowsExecutable(b));
+  return existing[0];
+}
+
 function pathSegments(env: NodeJS.ProcessEnv): string[] {
   const raw = env.PATH ?? env.Path ?? '';
   return raw
@@ -55,32 +77,24 @@ export function resolveExecutableOnPath(
         stdio: ['ignore', 'pipe', 'ignore'],
         windowsHide: true,
       });
-      for (const line of output.split(/\r?\n/)) {
-        const candidate = line.trim();
-        if (!candidate) continue;
-        try {
-          if (fs.existsSync(candidate)) return candidate;
-        } catch {
-          // ignore
-        }
-      }
+      const fromWhere = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const best = pickBestExecutable(fromWhere);
+      if (best) return best;
     } catch {
       // where.exe failed — fall back to PATH scan
     }
   }
 
+  const pathCandidates: string[] = [];
   for (const segment of pathSegments(env)) {
     for (const ext of WINDOWS_TOOL_EXTENSIONS) {
-      const candidate = path.join(segment, `${tool}${ext}`);
-      try {
-        if (fs.existsSync(candidate)) return candidate;
-      } catch {
-        // ignore
-      }
+      pathCandidates.push(path.join(segment, `${tool}${ext}`));
     }
   }
-
-  return undefined;
+  return pickBestExecutable(pathCandidates);
 }
 
 export interface ResolvedToolPaths {

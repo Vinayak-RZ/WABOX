@@ -27,6 +27,7 @@
     "benchmark": "tsx scripts/benchmark-wabox-vs-docker.ts",
     "diagnose": "tsx scripts/diagnose-mxc.ts",
     "warmup": "tsx scripts/warmup-mxc.ts",
+    "probe:node": "tsx scripts/probe-node-sandbox.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

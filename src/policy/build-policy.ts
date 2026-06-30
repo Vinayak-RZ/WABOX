@@ -9,6 +9,11 @@ import { execLog } from '../infrastructure/exec-log.js';
 import { NODE_DEV_EXPECTED_TOOLS } from '../presets/node-dev.js';
 import { getPreset } from '../presets/registry.js';
 import { resolveMinimalMirrorPaths } from './resolve-tool-paths.js';
+import {
+  isExpandNodeMirrorEnabled,
+  resolveNodeInitReadonlyPaths,
+} from './node-init-paths.js';
+import { resolveSandboxTempPaths } from './sandbox-temp.js';
 
 export interface BuildPolicyInput {
   preset: PresetName;
@@ -122,6 +127,9 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
     toolsNotFound = toolDetection.notFound;
   } else if (mirrorMode === 'minimal') {
     const extraPaths = toolsDir ? [toolsDir] : [];
+    if (isExpandNodeMirrorEnabled(process.env)) {
+      extraPaths.push(...resolveNodeInitReadonlyPaths(process.env));
+    }
     const resolved = resolveMinimalMirrorPaths(process.env, extraPaths);
     const applied = applyReadonlyMirror(merged, resolved.paths, 'minimal');
     merged = applied.merged;
@@ -137,11 +145,20 @@ export function buildPolicy(input: BuildPolicyInput): BuildPolicyResult {
   }
 
   const temp = getTemporaryFilesPolicy();
+  const workspaceTemp = resolveSandboxTempPaths(
+    merged.filesystem?.workspacePath,
+    process.env,
+  );
+  const tempReadwrite =
+    workspaceTemp.length > 0
+      ? workspaceTemp
+      : (temp.readwritePaths ?? []);
+
   merged = {
     ...merged,
     filesystem: {
       ...merged.filesystem,
-      readwritePaths: unionPaths(merged.filesystem?.readwritePaths, temp.readwritePaths),
+      readwritePaths: unionPaths(merged.filesystem?.readwritePaths, tempReadwrite),
     },
   };
 
