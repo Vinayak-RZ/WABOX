@@ -12,7 +12,10 @@ import {
   isExecTraceEnabled,
   policyLog,
 } from './exec-log.js';
+import { describeColdStartSituation, resolveExecTimeoutMs } from './exec-timeout.js';
 import { runHostPrepReport, suggestSpawnHangFix } from './host-prep-check.js';
+import { readWaboxEnv } from './wabox-env.js';
+import { markBootWarmed } from './warmup-state.js';
 
 export { quoteWindowsCommandLine } from '../policy/windows-command.js';
 
@@ -53,9 +56,19 @@ export async function execInMxcSandbox(
 ): Promise<MxcExecResult> {
   const startedAt = Date.now();
   const mxcPolicy: SandboxPolicy = toMxcPolicy({ policy, command });
-  const timeoutMs = options.timeoutMs ?? policy.timeoutMs ?? 120_000;
+  const envConfig = readWaboxEnv();
+  const timeoutMs = resolveExecTimeoutMs(policy, {
+    timeoutMs: options.timeoutMs,
+    env: envConfig,
+    cwd: options.cwd,
+  });
   const preparedCommand = prepareWindowsCommandLine(command);
   const quotedCommand = quoteWindowsCommandLine(preparedCommand);
+
+  const coldNote = describeColdStartSituation(policy);
+  if (coldNote) {
+    execLog('cold-start', { note: coldNote, timeoutMs });
+  }
 
   execLog('begin', {
     command,
@@ -252,6 +265,9 @@ export async function execInMxcSandbox(
         firstOutputMs: firstOutputAt,
       });
       finish(() => {
+        if ((code ?? -1) === 0) {
+          markBootWarmed(durationMs, command, options.cwd);
+        }
         resolve({
           exitCode: code ?? -1,
           stdout,

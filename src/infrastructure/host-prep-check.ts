@@ -19,12 +19,45 @@ export interface NullDeviceStatus {
   skipped?: boolean;
   error?: string;
   rawJson?: string;
+  /** How the check was performed. */
+  method?: 'wxc-host-prep' | 'powershell' | 'unavailable';
 }
 
 export interface HostPrepReport {
   drives: DriveAceStatus[];
   nullDevice: NullDeviceStatus;
   recommendations: string[];
+}
+
+/** wxc-host-prep has requireAdministrator — Node spawn gets EACCES; use PowerShell wrapper. */
+async function runHostPrepViaPowerShell(
+  args: string[],
+  timeoutMs = 90_000,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const hostPrep = resolveMxcHostPrepPath().replace(/'/g, "''");
+  const argList = args.map((a) => `'${a.replace(/'/g, "''")}'`).join(' ');
+  const ps = `& '${hostPrep}' ${argList}; exit $LASTEXITCODE`;
+
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', ps],
+      { timeout: timeoutMs, windowsHide: true, maxBuffer: 2 * 1024 * 1024 },
+    );
+    return { stdout, stderr, exitCode: 0 };
+  } catch (error: unknown) {
+    const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+    const parsed =
+      typeof err.code === 'number'
+        ? err.code
+        : Number.parseInt(String(err.code ?? ''), 10);
+    const exitCode = Number.isFinite(parsed) ? parsed : 1;
+    throw Object.assign(new Error(err.message), {
+      exitCode,
+      stdout: err.stdout ?? '',
+      stderr: err.stderr ?? '',
+    });
+  }
 }
 
 /** Extract unique drive roots (e.g. `D:\`) from filesystem policy paths. */
@@ -102,28 +135,26 @@ export async function checkDriveRootAce(driveRoot: string): Promise<DriveAceStat
 
 export async function verifyNullDevice(): Promise<NullDeviceStatus> {
   if (process.platform !== 'win32') {
-    return { ok: true, exitCode: 0, skipped: true, error: 'not Windows' };
+    return { ok: true, exitCode: 0, skipped: true, error: 'not Windows', method: 'unavailable' };
   }
 
-  const hostPrep = resolveMxcHostPrepPath();
   try {
-    const { stdout } = await execFileAsync(hostPrep, ['verify-null-device', '--json'], {
-      timeout: 60_000,
-      windowsHide: true,
-    });
-    return { ok: true, exitCode: 0, rawJson: stdout.trim() };
-  } catch (error: unknown) {
-    const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
-    const parsed =
-      typeof err.code === 'number'
-        ? err.code
-        : Number.parseInt(String(err.code ?? ''), 10);
-    const exitCode = Number.isFinite(parsed) ? parsed : 1;
+    const result = await runHostPrepViaPowerShell(['verify-null-device', '--json']);
     return {
-      ok: false,
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      rawJson: result.stdout.trim() || undefined,
+      method: 'powershell',
+    };
+  } catch (error: unknown) {
+    const err = error as Error & { exitCode?: number; stdout?: string };
+    const exitCode = err.exitCode ?? 1;
+    return {
+      ok: exitCode === 0,
       exitCode,
       error: err.message,
       rawJson: err.stdout?.trim(),
+      method: 'powershell',
     };
   }
 }
@@ -145,7 +176,7 @@ export function buildHostPrepRecommendations(
 
   if (!nullDevice.skipped && !nullDevice.ok) {
     recs.push(
-      'Run elevated after each reboot: wxc-host-prep prepare-null-device',
+      'Run elevated after each reboot: wxc-host-prep prepare-null-device (cmd/node hang with zero output if NUL is not prepared)',
     );
   }
 
@@ -163,7 +194,7 @@ export async function runHostPrepReport(policy: WaboxPolicy): Promise<HostPrepRe
   );
   if (nonSystemDrives.length > 0) {
     recommendations.push(
-      `Workspace or tools on ${nonSystemDrives.join(', ')}: first spawn after reboot may take 4–10 min (MXC DACL walk) with no stdout/stderr. Set WABOX_EXEC_TIMEOUT_MS=600000 or warm up once.`,
+      `Workspace or tools on ${nonSystemDrives.join(', ')}: first spawn after reboot triggers MXC DACL setup (often 4–10 min, zero output). Run "npm run warmup" once per boot, or set WABOX_COLD_START_TIMEOUT_MS=900000.`,
     );
   }
 
@@ -199,7 +230,10 @@ export function suggestSpawnHangFix(ctx: SpawnHangContext): string {
   const systemDrive = `${process.env.SystemDrive ?? 'C:'}\\`.toUpperCase();
   const hasNonSystemDrive = drives.some((d) => d.toUpperCase() !== systemDrive);
   if (hasNonSystemDrive) {
-    return 'Still in wxc-exec — first spawn on non-system-drive paths (e.g. D:\\) often takes 4–10 min after reboot with zero output. Increase WABOX_EXEC_TIMEOUT_MS or wait once.';
+    if (elapsedMs < 360_000) {
+      return `D:\\ cold DACL in progress (${Math.round(elapsedMs / 1000)}s) — first spawn after reboot often needs 5–10 min with zero output. Do not kill; run "npm run warmup" or wait.`;
+    }
+    return 'Still in wxc-exec on D: paths — if this exceeds ~10 min, run elevated: wxc-host-prep prepare-null-device, then npm run warmup';
   }
 
   return 'Still in wxc-exec (DACL recovery on policy paths). First spawn after reboot can take several minutes with no output.';

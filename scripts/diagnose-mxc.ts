@@ -15,6 +15,8 @@ import { execInMxcSandbox } from '../src/infrastructure/mxc-adapter.js';
 import { getSupportStatus } from '../src/infrastructure/platform.js';
 import { readWaboxEnv, mergeAgentSandboxOptions } from '../src/infrastructure/wabox-env.js';
 import { runHostPrepReport } from '../src/infrastructure/host-prep-check.js';
+import { describeColdStartSituation, resolveExecTimeoutMs } from '../src/infrastructure/exec-timeout.js';
+import { isBootWarmed } from '../src/infrastructure/warmup-state.js';
 import { resolveMxcHostPrepPath } from '../src/infrastructure/mxc-bin-path.js';
 import { sanitizeMirroredReadonlyPaths } from '../src/policy/sanitize-paths.js';
 import { isWaboxError } from '../src/domain/errors.js';
@@ -117,7 +119,8 @@ async function main(): Promise<void> {
     overrides: merged.policy,
   });
 
-  const timeoutMs = merged.policy?.timeoutMs ?? 300_000;
+  const timeoutMs = resolveExecTimeoutMs(policy, { env: waboxEnv });
+  const coldNote = describeColdStartSituation(policy);
 
   printSection('1. Host preparation');
   const hostPrep = await runHostPrepReport(policy);
@@ -168,7 +171,9 @@ async function main(): Promise<void> {
   printSection('3. Environment');
   console.log(`   WABOX_MIRROR_ENV: ${waboxEnv.mirrorEnv ?? '(default full)'}`);
   console.log(`   WABOX_WORKSPACE_PATH: ${waboxEnv.workspacePath ?? '(cwd)'}`);
-  console.log(`   WABOX_EXEC_TIMEOUT_MS: ${timeoutMs}`);
+  console.log(`   WABOX_EXEC_TIMEOUT_MS: ${waboxEnv.execTimeoutMs ?? '(default)'}`);
+  console.log(`   WABOX_COLD_START_TIMEOUT_MS: ${process.env.WABOX_COLD_START_TIMEOUT_MS ?? '900000 (default)'}`);
+  console.log(`   resolved exec timeout: ${timeoutMs}ms`);
   console.log(`   WABOX_TOOLS_DIR: ${waboxEnv.toolsDir ?? '(unset)'}`);
   console.log(`   SystemDrive: ${process.env.SystemDrive ?? 'C:'}`);
 
@@ -202,7 +207,13 @@ async function main(): Promise<void> {
   console.log(`   temp dirs: ${temp.readwritePaths?.join('; ') ?? '(none)'}`);
 
   printSection('5. Sandbox exec tests');
-  console.log(`   timeout per test: ${timeoutMs}ms`);
+  console.log(`   timeout per test: ${timeoutMs}ms (${Math.round(timeoutMs / 60_000)} min)`);
+  if (isBootWarmed()) {
+    console.log('   boot warmup: ✓ already warmed this session');
+  } else if (coldNote) {
+    console.log(`   boot warmup: ✗ not warmed — ${coldNote}`);
+    console.log('   tip: run "npm run warmup" once per reboot before diagnose');
+  }
   console.log('   (WABOX_DEBUG=trace streams live stdout/stderr)\n');
 
   const execTests: ExecTestResult[] = [];
@@ -288,6 +299,7 @@ async function main(): Promise<void> {
 
   const recommendations = [...hostPrep.recommendations];
   if (failedStep) {
+    recommendations.push('Run "npm run warmup" once per reboot (D: workspace DACL can take 5–10 min on first spawn).');
     recommendations.push('Re-run with WABOX_DEBUG=trace to stream wxc-exec stdout/stderr live.');
   }
 

@@ -21,6 +21,7 @@ Thumbs.db
 
 # WABOX runtime (session logs, benchmark output — local only)
 .wabox/
+.wabox-test-warmup/
 
 # Local development — not published to the public repo
 learning/

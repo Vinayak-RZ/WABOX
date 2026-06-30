@@ -26,6 +26,7 @@
     "example": "tsx examples/minimal-agent.ts",
     "benchmark": "tsx scripts/benchmark-wabox-vs-docker.ts",
     "diagnose": "tsx scripts/diagnose-mxc.ts",
+    "warmup": "tsx scripts/warmup-mxc.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

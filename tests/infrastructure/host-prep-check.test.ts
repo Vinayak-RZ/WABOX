@@ -55,6 +55,6 @@ describe('host-prep-check', () => {
       policy,
       driveAceOk: new Map([['D:\\', true]]),
     });
-    expect(hint).toMatch(/4–10 min|non-system-drive/i);
+    expect(hint).toMatch(/D:\\\\ cold DACL|warmup/i);
   });
 });
