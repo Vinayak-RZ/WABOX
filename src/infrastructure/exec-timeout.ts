@@ -1,6 +1,6 @@
 import type { WaboxPolicy } from '../domain/types.js';
 import { collectPolicyDriveRoots } from './host-prep-check.js';
-import { isBootWarmed } from './warmup-state.js';
+import { isBootWarmedForPolicy } from './warmup-state.js';
 import type { WaboxEnvConfig } from './wabox-env.js';
 
 const DEFAULT_COLD_START_TIMEOUT_MS = 900_000; // 15 min — D:\ DACL first spawn can exceed 5 min
@@ -34,7 +34,7 @@ export function resolveExecTimeoutMs(
     policy.timeoutMs ??
     120_000;
 
-  if (isBootWarmed(options.cwd)) {
+  if (isBootWarmedForPolicy(policy, options.cwd)) {
     return base;
   }
 
@@ -46,8 +46,8 @@ export function resolveExecTimeoutMs(
   return Math.max(base, cold);
 }
 
-export function describeColdStartSituation(policy: WaboxPolicy): string | undefined {
-  if (isBootWarmed()) return undefined;
+export function describeColdStartSituation(policy: WaboxPolicy, cwd = process.cwd()): string | undefined {
+  if (isBootWarmedForPolicy(policy, cwd)) return undefined;
   if (!hasNonSystemDriveInPolicy(policy)) return undefined;
 
   const drives = collectPolicyDriveRoots(policy).filter(

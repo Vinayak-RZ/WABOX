@@ -16,7 +16,7 @@ import { getSupportStatus } from '../src/infrastructure/platform.js';
 import { readWaboxEnv, mergeAgentSandboxOptions } from '../src/infrastructure/wabox-env.js';
 import { runHostPrepReport } from '../src/infrastructure/host-prep-check.js';
 import { describeColdStartSituation, resolveExecTimeoutMs } from '../src/infrastructure/exec-timeout.js';
-import { isBootWarmed } from '../src/infrastructure/warmup-state.js';
+import { warmupPolicyStatus } from '../src/infrastructure/warmup-state.js';
 import { resolveMxcHostPrepPath } from '../src/infrastructure/mxc-bin-path.js';
 import { sanitizeMirroredReadonlyPaths } from '../src/policy/sanitize-paths.js';
 import { isWaboxError } from '../src/domain/errors.js';
@@ -208,8 +208,12 @@ async function main(): Promise<void> {
 
   printSection('5. Sandbox exec tests');
   console.log(`   timeout per test: ${timeoutMs}ms (${Math.round(timeoutMs / 60_000)} min)`);
-  if (isBootWarmed()) {
-    console.log('   boot warmup: ✓ already warmed this session');
+  const warmupStatus = warmupPolicyStatus(policy);
+  if (warmupStatus === 'current') {
+    console.log('   boot warmup: ✓ warmed for current policy');
+  } else if (warmupStatus === 'stale') {
+    console.log('   boot warmup: ⚠ stale — policy paths changed since last warmup');
+    console.log('   tip: run "npm run warmup" again (DACL walk needed for new paths)');
   } else if (coldNote) {
     console.log(`   boot warmup: ✗ not warmed — ${coldNote}`);
     console.log('   tip: run "npm run warmup" once per reboot before diagnose');

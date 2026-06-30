@@ -202,7 +202,7 @@ Copy [`.env.example`](.env.example) to `.env` (gitignored). Programmatic overrid
 | `WABOX_BENCHMARK_ITERATIONS` | `3` | Benchmark script only |
 | `WABOX_INTEGRATION` | — | Set `1` to run Windows integration tests |
 
-**Drive-root Node warning:** if `node.exe` sits at `D:\node.exe`, mirroring `D:\` can cause MXC DACL mutex hangs. Move tools into `D:\nodejs\` and set `WABOX_TOOLS_DIR=D:/nodejs`. See [docs/BENCHMARK.md](docs/BENCHMARK.md).
+**Drive-root Node warning:** if `node.exe` sits at `D:\node.exe`, mirroring `D:\` can cause MXC DACL mutex hangs. Move tools into `D:\nodejs\` and set `WABOX_TOOLS_DIR=D:/nodejs`. See [docs/BENCHMARK.md](docs/BENCHMARK.md) and [docs/MXC_DACL_AND_PERFORMANCE.md](docs/MXC_DACL_AND_PERFORMANCE.md).
 
 `mirrorEnv` on `createAgentSandbox()` accepts `true` (full), `'minimal'`, or `false` — see `src/infrastructure/env-mirror.ts`.
 

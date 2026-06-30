@@ -12,7 +12,7 @@ import { execInMxcSandbox } from '../src/infrastructure/mxc-adapter.js';
 import { mergeAgentSandboxOptions, readWaboxEnv } from '../src/infrastructure/wabox-env.js';
 import { prepareWindowsCommandLine } from '../src/policy/windows-command.js';
 import { resolveNodeInitReadonlyPaths } from '../src/policy/node-init-paths.js';
-import { isBootWarmed } from '../src/infrastructure/warmup-state.js';
+import { isBootWarmedForPolicy } from '../src/infrastructure/warmup-state.js';
 
 const NODE_CMD = 'node -e "console.log(42)"';
 const NPM_CMD = 'npm --version';
@@ -90,15 +90,21 @@ async function runCase(
 async function main(): Promise<void> {
   console.log('=== WABOX Node Sandbox Probe ===\n');
 
-  if (!isBootWarmed()) {
-    console.warn('⚠ Boot not warmed — run "npm run warmup" first or probes may take 5–10 min each.\n');
-  }
-
   const waboxEnv = readWaboxEnv();
   const merged = mergeAgentSandboxOptions({
     preset: 'node-dev',
     policy: { filesystem: { workspacePath: waboxEnv.workspacePath ?? process.cwd() } },
   });
+
+  const { policy } = buildPolicy({
+    preset: 'node-dev',
+    mirrorEnv: merged.mirrorEnv,
+    overrides: merged.policy,
+  });
+
+  if (!isBootWarmedForPolicy(policy)) {
+    console.warn('⚠ Not warmed for current policy — run "npm run warmup" first or probes may take 5–10 min each.\n');
+  }
 
   const timeoutMs = waboxEnv.execTimeoutMs ?? 120_000;
 

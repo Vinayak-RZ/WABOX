@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { isBootWarmed, markBootWarmed, clearWarmupState } from '../../src/infrastructure/warmup-state.js';
+import { isBootWarmedForPolicy, markBootWarmed, clearWarmupState } from '../../src/infrastructure/warmup-state.js';
 import {
   hasNonSystemDriveInPolicy,
   resolveExecTimeoutMs,
@@ -23,10 +23,20 @@ describe('warmup-state', () => {
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
   });
 
-  it('isBootWarmed is false until markBootWarmed', () => {
-    expect(isBootWarmed(TEST_DIR)).toBe(false);
-    markBootWarmed(1000, 'cmd /c echo', TEST_DIR);
-    expect(isBootWarmed(TEST_DIR)).toBe(true);
+  it('isBootWarmedForPolicy is false until markBootWarmed with matching policy', () => {
+    const policy: WaboxPolicy = { filesystem: { readwritePaths: ['D:/Tech/WABOX'] } };
+    expect(isBootWarmedForPolicy(policy, TEST_DIR)).toBe(false);
+    markBootWarmed(1000, 'cmd /c echo', policy, TEST_DIR);
+    expect(isBootWarmedForPolicy(policy, TEST_DIR)).toBe(true);
+  });
+
+  it('warmup is stale when policy paths change', () => {
+    const policyA: WaboxPolicy = { filesystem: { readwritePaths: ['D:/Tech/WABOX'] } };
+    const policyB: WaboxPolicy = {
+      filesystem: { readwritePaths: ['D:/Tech/WABOX', 'D:/Tech/WABOX/.wabox/tmp'] },
+    };
+    markBootWarmed(1000, 'cmd', policyA, TEST_DIR);
+    expect(isBootWarmedForPolicy(policyB, TEST_DIR)).toBe(false);
   });
 });
 
@@ -50,10 +60,10 @@ describe('exec-timeout', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses base timeout after warmup', () => {
+  it('uses base timeout after warmup for same policy', () => {
     fs.mkdirSync(TEST_DIR, { recursive: true });
     process.env.WABOX_WARMUP_STATE = path.join(TEST_DIR, 'warmup.json');
-    markBootWarmed(1000, 'cmd', TEST_DIR);
+    markBootWarmed(1000, 'cmd', dPolicy, TEST_DIR);
 
     const ms = resolveExecTimeoutMs(dPolicy, {
       timeoutMs: 120_000,

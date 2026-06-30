@@ -11,18 +11,11 @@ import { buildPolicy } from '../src/policy/build-policy.js';
 import { execInMxcSandbox } from '../src/infrastructure/mxc-adapter.js';
 import { mergeAgentSandboxOptions, readWaboxEnv } from '../src/infrastructure/wabox-env.js';
 import { describeColdStartSituation, resolveExecTimeoutMs } from '../src/infrastructure/exec-timeout.js';
-import { isBootWarmed, readWarmupState } from '../src/infrastructure/warmup-state.js';
+import { isBootWarmedForPolicy, readWarmupState, warmupPolicyStatus } from '../src/infrastructure/warmup-state.js';
 import { runHostPrepReport } from '../src/infrastructure/host-prep-check.js';
 
 async function main(): Promise<void> {
   console.log('=== WABOX MXC Warmup ===\n');
-
-  if (isBootWarmed()) {
-    const state = readWarmupState();
-    console.log(`Already warmed this boot at ${state?.warmedAt} (${state?.durationMs}ms).`);
-    console.log('Subsequent exec() calls should be fast (~1–2s).');
-    return;
-  }
 
   const waboxEnv = readWaboxEnv();
   const merged = mergeAgentSandboxOptions({
@@ -35,6 +28,18 @@ async function main(): Promise<void> {
     mirrorEnv: merged.mirrorEnv,
     overrides: merged.policy,
   });
+
+  if (isBootWarmedForPolicy(policy)) {
+    const state = readWarmupState();
+    console.log(`Already warmed for current policy at ${state?.warmedAt} (${state?.durationMs}ms).`);
+    console.log('Subsequent exec() calls should be fast (~1–2s).');
+    return;
+  }
+
+  const status = warmupPolicyStatus(policy);
+  if (status === 'stale') {
+    console.log('Policy paths changed since last warmup — re-running DACL warmup.\n');
+  }
 
   const hostPrep = await runHostPrepReport(policy);
   for (const drive of hostPrep.drives) {

@@ -266,7 +266,7 @@ export async function execInMxcSandbox(
       });
       finish(() => {
         if ((code ?? -1) === 0) {
-          markBootWarmed(durationMs, command, options.cwd);
+          markBootWarmed(durationMs, command, policy, options.cwd);
         }
         resolve({
           exitCode: code ?? -1,
